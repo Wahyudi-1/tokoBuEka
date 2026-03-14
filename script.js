@@ -5,8 +5,7 @@
 // URL App Script yang Anda berikan
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwJaibVoPt_yvrP4qxs5N5IAPdEj8Bb6gdEYtmwufkpNPyPx_gPs5WiwI-plMVMO8-haA/exec";
 
-const App = {
-    state: {
+state: {
         currentUser: null,
         barang: [],
         pengguna: [],
@@ -15,9 +14,12 @@ const App = {
         transaksiAktif: null,
         modeEdit: { barang: false, pengguna: false },
         scannerTarget: null,
-        html5QrCode: null
+        html5QrCode: null,
+        // --- TAMBAHAN UNTUK BLUETOOTH PRINTER ---
+        printerDevice: null,
+        printerCharacteristic: null,
+        isPrinting: false
     },
-
     // ==========================================
     // 2. UTILITAS
     // ==========================================
@@ -471,8 +473,8 @@ const App = {
         App.toggleLoading(false);
     },
 
-    // ==========================================
-    // 6. TAMPILAN STRUK & AKSI CETAK / WA
+   // ==========================================
+    // 6. TAMPILAN STRUK & AKSI
     // ==========================================
     tampilkanStruk: (tx) => {
         document.getElementById('area-kasir').classList.add('hidden');
@@ -510,52 +512,32 @@ const App = {
         `;
         
         document.getElementById('struk-content').innerHTML = html;
-    },
 
-    kirimWhatsApp: () => {
-        const tx = App.state.transaksiAktif;
-        let wa = tx.no_wa.replace(/\D/g, '');
-        if(!wa || wa.length < 10) { 
-            wa = prompt("Masukkan Nomor WA Pelanggan (08...):"); 
-            if(!wa) return; 
-            wa = wa.replace(/\D/g, ''); 
-        }
-        if(wa.startsWith('0')) wa = '62' + wa.substring(1);
+        // Tambahkan UI Koneksi Bluetooth & Tombol Dinamis ke area struk
+        const areaStruk = document.getElementById('area-struk');
+        
+        // Hapus div .grid yang lama jika ada (mencegah duplikasi tombol)
+        const oldGrid = areaStruk.querySelector('.grid');
+        if(oldGrid) oldGrid.remove();
 
-        let text = `*TOKO POS TERPADU*\n\nTerima kasih *${tx.nama_pelanggan}* telah berbelanja.\nID: ${tx.id}\n------------------------\n`;
-        tx.keranjang.forEach(k => { 
-            text += `${k.namaBarang}\n${k.jumlah} ${k.satuan} x ${App.formatRp(k.hargaSatuan)} = ${App.formatRp(k.subtotal)}\n`; 
-        });
-        text += `------------------------\n*TOTAL: ${App.formatRp(tx.totalBelanja)}*\nBayar: ${App.formatRp(tx.jumlahBayar)}\nKembali: ${App.formatRp(tx.kembalian)}\n\nSemoga Berkah ^_^`;
-        
-        window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`);
-    },
+        const btnStatus = App.state.printerCharacteristic ? "✅ Printer Terhubung" : "❌ Printer Belum Terhubung";
+        const btnColor = App.state.printerCharacteristic ? "text-green-600" : "text-gray-500";
 
-    ubahTransaksi: () => {
-        if(!confirm("Yakin ingin mengubah? Jika server mengizinkan transaksi ini akan disetel ulang.")) return;
-        
-        // Memuat ulang keranjang dari transaksi yang sedang aktif
-        App.state.keranjang = App.state.transaksiAktif.keranjang;
-        document.getElementById('kasir-bayar').value = App.state.transaksiAktif.jumlahBayar;
-        document.getElementById('trans-nama-pelanggan').value = App.state.transaksiAktif.nama_pelanggan;
-        document.getElementById('trans-no-wa').value = App.state.transaksiAktif.no_wa;
-        
-        document.getElementById('area-struk').classList.add('hidden');
-        document.getElementById('area-kasir').classList.remove('hidden');
-        App.renderKeranjang();
-    },
-
-    transaksiBaru: () => {
-        App.state.keranjang = []; 
-        App.state.transaksiAktif = null;
-        document.getElementById('kasir-bayar').value = '';
-        document.getElementById('trans-nama-pelanggan').value = '';
-        document.getElementById('trans-no-wa').value = '';
-        
-        document.getElementById('area-struk').classList.add('hidden');
-        document.getElementById('area-kasir').classList.remove('hidden');
-        document.getElementById('input-cari-kasir').focus();
-        App.renderKeranjang();
+        areaStruk.insertAdjacentHTML('beforeend', `
+            <div class="grid grid-cols-1 gap-3 no-print mb-4 p-3 bg-gray-50 border rounded-lg">
+                <div class="flex justify-between items-center">
+                    <span id="bt-status" class="text-xs font-bold ${btnColor}">${btnStatus}</span>
+                    <button onclick="App.connectBluetooth()" class="text-xs bg-gray-800 text-white px-3 py-1 rounded hover:bg-gray-700">🔌 Hubungkan Bluetooth</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 no-print">
+                <button onclick="App.cetakStrukThermal()" class="col-span-2 bg-black text-white py-3 rounded-lg font-bold hover:bg-gray-800 flex justify-center items-center gap-2">🖨️ CETAK STRUK THERMAL</button>
+                <button onclick="window.print()" class="bg-blue-100 text-blue-700 border border-blue-300 py-2 rounded-lg font-medium hover:bg-blue-200">📄 Cetak Biasa (A4)</button>
+                <button onclick="App.kirimWhatsApp()" class="bg-green-500 text-white py-2 rounded-lg font-medium hover:bg-green-600">💬 Kirim WA</button>
+                <button onclick="App.ubahTransaksi()" class="bg-yellow-500 text-white py-2 rounded-lg font-medium hover:bg-yellow-600">✏️ Ubah Trans</button>
+                <button onclick="App.transaksiBaru()" class="bg-gray-600 text-white py-2 rounded-lg font-medium hover:bg-gray-700">➕ Trans Baru</button>
+            </div>
+        `);
     },
 
     // ==========================================
@@ -739,3 +721,127 @@ document.getElementById('form-login').addEventListener('submit', App.login);
 document.getElementById('form-barang').addEventListener('submit', App.simpanBarang);
 document.getElementById('form-pengguna').addEventListener('submit', App.simpanPengguna);
 window.onload = App.init;
+
+// ==========================================
+    // 9. LOGIKA PRINTER THERMAL (WEB BLUETOOTH)
+    // ==========================================
+    connectBluetooth: async () => {
+        if (!navigator.bluetooth) {
+            alert("Browser tidak mendukung Web Bluetooth. Gunakan Google Chrome di Android, Windows, atau Mac.");
+            return;
+        }
+
+        try {
+            App.toggleLoading(true, "Mencari Printer...");
+            
+            // Disconnect jika sebelumnya terhubung
+            if (App.state.printerDevice && App.state.printerDevice.gatt.connected) {
+                App.state.printerDevice.gatt.disconnect();
+            }
+
+            // Meminta akses ke perangkat Bluetooth (UUID standar printer kasir/thermal)
+            App.state.printerDevice = await navigator.bluetooth.requestDevice({
+                filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }]
+            });
+            
+            App.state.printerDevice.addEventListener('gattserverdisconnected', App.onDisconnected);
+            
+            App.toggleLoading(true, "Menghubungkan...");
+            const server = await App.state.printerDevice.gatt.connect();
+            await new Promise(r => setTimeout(r, 500)); // Beri jeda stabilitas hardware
+            
+            const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+            App.state.printerCharacteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+
+            App.showToast("Printer Bluetooth Berhasil Terhubung!", "success");
+            
+            // Update UI Text Status
+            const statusEl = document.getElementById('bt-status');
+            if(statusEl) {
+                statusEl.innerText = "✅ Printer Terhubung";
+                statusEl.className = "text-xs font-bold text-green-600";
+            }
+        } catch (error) {
+            if (error.name !== 'NotFoundError') { // NotFoundError terjadi jika user klik 'Cancel'
+                App.showToast("Gagal koneksi: " + error.message, "error");
+            }
+            App.onDisconnected();
+        } finally {
+            App.toggleLoading(false);
+        }
+    },
+
+    onDisconnected: () => {
+        App.state.printerCharacteristic = null;
+        const statusEl = document.getElementById('bt-status');
+        if(statusEl) {
+            statusEl.innerText = "❌ Printer Belum Terhubung";
+            statusEl.className = "text-xs font-bold text-red-500";
+        }
+    },
+
+    cetakStrukThermal: async () => {
+        const tx = App.state.transaksiAktif;
+        if (!tx) return App.showToast("Pilih data pesanan dulu!", "error");
+
+        if (!App.state.printerCharacteristic) {
+            if (confirm("Printer belum terhubung. Hubungkan Bluetooth sekarang?")) {
+                await App.connectBluetooth();
+                if (!App.state.printerCharacteristic) return; // Batal jika gagal connect
+            } else return;
+        }
+
+        if (App.state.isPrinting) return App.showToast("Printer sedang bekerja...", "info");
+        App.state.isPrinting = true;
+        App.showToast("Mengirim data ke printer...", "info");
+
+        try {
+            // Kode ESC/POS Printer Thermal
+            const ESC = '\u001B', GS = '\u001D', init = ESC + '@';
+            const center = ESC + 'a' + '\u0001', left = ESC + 'a' + '\u0000';
+            const boldOn = ESC + 'E' + '\u0001', boldOff = ESC + 'E' + '\u0000';
+            const bigFont = GS + '!' + '\u0011', normalFont = GS + '!' + '\u0000';
+
+            // Format Teks Struk
+            let receiptText = init + center + boldOn + bigFont + "TOKO POS TERPADU" + normalFont + boldOff + "\n";
+            receiptText += left + "--------------------------------\n";
+            receiptText += `ID   : ${tx.id}\n`;
+            receiptText += `Waktu: ${tx.tanggal}\n`;
+            receiptText += `Kasir: ${tx.kasir}\n`;
+            receiptText += `Plg  : ${tx.nama_pelanggan}\n`;
+            receiptText += "--------------------------------\n";
+
+            tx.keranjang.forEach((item) => {
+                receiptText += `${boldOn}${item.namaBarang}${boldOff}\n`;
+                let detailStr = `  ${item.jumlah} ${item.satuan} x Rp ${item.hargaSatuan.toLocaleString('id-ID')}`;
+                let subtotalStr = `Rp ${item.subtotal.toLocaleString('id-ID')}`;
+                
+                // Menghitung spasi otomatis agar subtotal rata kanan (asumsi kertas 58mm = 32 karakter per baris)
+                let spaceCount = Math.max(1, 32 - (detailStr.length + subtotalStr.length));
+                receiptText += detailStr + " ".repeat(spaceCount) + subtotalStr + "\n";
+            });
+
+            receiptText += "--------------------------------\n";
+            receiptText += boldOn + `TOTAL BAYAR: Rp ${tx.totalBelanja.toLocaleString('id-ID')}\n` + boldOff;
+            receiptText += `Tunai      : Rp ${tx.jumlahBayar.toLocaleString('id-ID')}\n`;
+            receiptText += `Kembali    : Rp ${tx.kembalian.toLocaleString('id-ID')}\n`;
+            receiptText += "--------------------------------\n";
+            receiptText += center + "Terima Kasih, Semoga Berkah!\n\n\n\n"; 
+
+            // Convert string ke byte array untuk dikirim via Bluetooth
+            let encodedData = new TextEncoder().encode(receiptText);
+            
+            // Kirim data bertahap (chunking) maksimal 50 byte untuk mencegah buffer overflow di printer murah
+            const maxChunk = 50; 
+            for (let i = 0; i < encodedData.length; i += maxChunk) {
+                await App.state.printerCharacteristic.writeValue(encodedData.slice(i, i + maxChunk));
+                await new Promise(resolve => setTimeout(resolve, 50)); // Jeda 50ms per chunk
+            }
+            App.showToast("Berhasil mencetak struk!");
+        } catch (error) { 
+            App.showToast("Gagal mencetak. Cek status printer Anda.", "error"); 
+            App.onDisconnected();
+        } finally { 
+            App.state.isPrinting = false; 
+        }
+    },
