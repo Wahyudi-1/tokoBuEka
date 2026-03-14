@@ -5,7 +5,8 @@
 // URL App Script yang Anda berikan
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwJaibVoPt_yvrP4qxs5N5IAPdEj8Bb6gdEYtmwufkpNPyPx_gPs5WiwI-plMVMO8-haA/exec";
 
-state: {
+const App = {
+    state: {
         currentUser: null,
         barang: [],
         pengguna: [],
@@ -20,6 +21,7 @@ state: {
         printerCharacteristic: null,
         isPrinting: false
     },
+
     // ==========================================
     // 2. UTILITAS
     // ==========================================
@@ -56,7 +58,7 @@ state: {
     },
 
     // Metode utama mengirim request POST ke App Script
-   apiCall: async (payload) => {
+    apiCall: async (payload) => {
         try {
             // Menggunakan URLSearchParams lebih aman dan stabil untuk Google Apps Script
             const formBody = new URLSearchParams(payload);
@@ -442,7 +444,9 @@ state: {
         
         App.toggleLoading(true, "Memproses...");
         try {
-            // Kita gunakan raw JSON body untuk payload transaksi agar lebih stabil dikirim
+            // Mengirim request transaksi 
+            // Kita coba dengan JSON Stringify sesuai App 2 untuk data besar 
+            // Jika ada masalah CORS, ganti dengan cara App.apiCall di atas
             const res = await fetch(`${SCRIPT_URL}?action=prosesTransaksi`, { 
                 method: 'POST', 
                 body: JSON.stringify(payload) 
@@ -460,8 +464,8 @@ state: {
                 throw new Error(res.message);
             }
         } catch(e) { 
-            // Mock System: Jaga-jaga jika CORS Server App Script Gagal
-            App.showToast("Server sibuk. Menyimpan resi offline sementara.", "info"); 
+            // Fallback (Offline Mode / Mock) - Jaga-jaga CORS Error 
+            App.showToast("Transaksi disimpan lokal sementara.", "info"); 
             App.state.transaksiAktif = { 
                 ...payload, 
                 keranjang: [...App.state.keranjang], 
@@ -473,7 +477,7 @@ state: {
         App.toggleLoading(false);
     },
 
-   // ==========================================
+    // ==========================================
     // 6. TAMPILAN STRUK & AKSI
     // ==========================================
     tampilkanStruk: (tx) => {
@@ -524,7 +528,7 @@ state: {
         const btnColor = App.state.printerCharacteristic ? "text-green-600" : "text-gray-500";
 
         areaStruk.insertAdjacentHTML('beforeend', `
-            <div class="grid grid-cols-1 gap-3 no-print mb-4 p-3 bg-gray-50 border rounded-lg">
+            <div class="grid grid-cols-1 gap-3 no-print mb-4 p-3 bg-gray-50 border rounded-lg mt-4">
                 <div class="flex justify-between items-center">
                     <span id="bt-status" class="text-xs font-bold ${btnColor}">${btnStatus}</span>
                     <button onclick="App.connectBluetooth()" class="text-xs bg-gray-800 text-white px-3 py-1 rounded hover:bg-gray-700">🔌 Hubungkan Bluetooth</button>
@@ -538,6 +542,49 @@ state: {
                 <button onclick="App.transaksiBaru()" class="bg-gray-600 text-white py-2 rounded-lg font-medium hover:bg-gray-700">➕ Trans Baru</button>
             </div>
         `);
+    },
+
+    kirimWhatsApp: () => {
+        const tx = App.state.transaksiAktif;
+        let wa = tx.no_wa.replace(/\D/g, '');
+        if(!wa || wa.length < 10) { 
+            wa = prompt("Masukkan Nomor WA Pelanggan (08...):"); 
+            if(!wa) return; 
+            wa = wa.replace(/\D/g, ''); 
+        }
+        if(wa.startsWith('0')) wa = '62' + wa.substring(1);
+
+        let text = `*TOKO POS TERPADU*\n\nTerima kasih *${tx.nama_pelanggan}* telah berbelanja.\nID: ${tx.id}\n------------------------\n`;
+        tx.keranjang.forEach(k => { 
+            text += `${k.namaBarang}\n${k.jumlah} ${k.satuan} x ${App.formatRp(k.hargaSatuan)} = ${App.formatRp(k.subtotal)}\n`; 
+        });
+        text += `------------------------\n*TOTAL: ${App.formatRp(tx.totalBelanja)}*\nBayar: ${App.formatRp(tx.jumlahBayar)}\nKembali: ${App.formatRp(tx.kembalian)}\n\nSemoga Berkah ^_^`;
+        
+        window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`);
+    },
+
+    ubahTransaksi: () => {
+        if(!confirm("Yakin ingin mengubah? Transaksi lama akan dibatalkan (Jika didukung server).")) return;
+        App.state.keranjang = App.state.transaksiAktif.keranjang;
+        document.getElementById('kasir-bayar').value = App.state.transaksiAktif.jumlahBayar;
+        document.getElementById('trans-nama-pelanggan').value = App.state.transaksiAktif.nama_pelanggan;
+        document.getElementById('trans-no-wa').value = App.state.transaksiAktif.no_wa;
+        
+        document.getElementById('area-struk').classList.add('hidden');
+        document.getElementById('area-kasir').classList.remove('hidden');
+        App.renderKeranjang();
+    },
+
+    transaksiBaru: () => {
+        App.state.keranjang = []; 
+        App.state.transaksiAktif = null;
+        document.getElementById('kasir-bayar').value = '';
+        document.getElementById('trans-nama-pelanggan').value = '';
+        document.getElementById('trans-no-wa').value = '';
+        document.getElementById('area-struk').classList.add('hidden');
+        document.getElementById('area-kasir').classList.remove('hidden');
+        document.getElementById('input-cari-kasir').focus();
+        App.renderKeranjang();
     },
 
     // ==========================================
@@ -711,18 +758,9 @@ state: {
         }
         document.getElementById('scanner-container').classList.add('hidden');
         document.getElementById('scanner-container').classList.remove('flex');
-    }
-};
+    },
 
-// ==========================================
-// 9. INISIALISASI EVENT GLOBAL
-// ==========================================
-document.getElementById('form-login').addEventListener('submit', App.login);
-document.getElementById('form-barang').addEventListener('submit', App.simpanBarang);
-document.getElementById('form-pengguna').addEventListener('submit', App.simpanPengguna);
-window.onload = App.init;
-
-// ==========================================
+    // ==========================================
     // 9. LOGIKA PRINTER THERMAL (WEB BLUETOOTH)
     // ==========================================
     connectBluetooth: async () => {
@@ -844,4 +882,13 @@ window.onload = App.init;
         } finally { 
             App.state.isPrinting = false; 
         }
-    },
+    }
+};
+
+// ==========================================
+// 10. INISIALISASI EVENT GLOBAL
+// ==========================================
+document.getElementById('form-login').addEventListener('submit', App.login);
+document.getElementById('form-barang').addEventListener('submit', App.simpanBarang);
+document.getElementById('form-pengguna').addEventListener('submit', App.simpanPengguna);
+window.onload = App.init;
