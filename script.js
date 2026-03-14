@@ -279,15 +279,28 @@ const App = {
     cariBarangKasir: (val) => {
         const q = val.toLowerCase().trim();
         const hasilDiv = document.getElementById('hasil-cari-kasir');
+        
         if(q.length < 2) { 
             hasilDiv.classList.add('hidden'); 
             return; 
         }
         
-        // Filter nama/kode, max tampil 8 items
+        // 1. CEK KECOCOKAN PERSIS (Sangat berguna saat pakai Scanner)
+        // Memaksa (String) agar jika Google Sheet mengirim format Angka, tidak error
+        const exactMatch = App.state.barang.find(b => 
+            String(b.Kode_Barang || '').toLowerCase() === q
+        );
+
+        if(exactMatch) {
+            // Jika barcode sama persis, langsung proses tanpa tampilkan dropdown
+            App.pilihBarangKasir(exactMatch);
+            return;
+        }
+        
+        // 2. JIKA TIDAK SAMA PERSIS (Pencarian nama/kode sebagian)
         const hasil = App.state.barang.filter(b => 
-            (b.Kode_Barang || '').toLowerCase().includes(q) || 
-            (b.Nama_Barang || '').toLowerCase().includes(q)
+            String(b.Kode_Barang || '').toLowerCase().includes(q) || 
+            String(b.Nama_Barang || '').toLowerCase().includes(q)
         ).slice(0, 8);
         
         if(hasil.length > 0) {
