@@ -485,7 +485,7 @@ const App = {
         document.getElementById('area-struk').classList.remove('hidden');
         
         let html = `
-            <div class="text-center font-bold text-xl mb-1">TOKO POS TERPADU</div>
+            <div class="text-center font-bold text-xl mb-1">TOKO BU EKA</div>
             <div class="text-center text-xs text-gray-600 mb-4 border-b border-dashed border-gray-400 pb-2">
                 ID: ${tx.id}<br>Waktu: ${tx.tanggal}<br>Kasir: ${tx.kasir}
             </div>
@@ -554,7 +554,7 @@ const App = {
         }
         if(wa.startsWith('0')) wa = '62' + wa.substring(1);
 
-        let text = `*TOKO POS TERPADU*\n\nTerima kasih *${tx.nama_pelanggan}* telah berbelanja.\nID: ${tx.id}\n------------------------\n`;
+        let text = `*TOKO BU EKA*\n\nTerima kasih *${tx.nama_pelanggan}* telah berbelanja.\nID: ${tx.id}\n------------------------\n`;
         tx.keranjang.forEach(k => { 
             text += `${k.namaBarang}\n${k.jumlah} ${k.satuan} x ${App.formatRp(k.hargaSatuan)} = ${App.formatRp(k.subtotal)}\n`; 
         });
@@ -841,7 +841,7 @@ const App = {
             const bigFont = GS + '!' + '\u0011', normalFont = GS + '!' + '\u0000';
 
             // Format Teks Struk
-            let receiptText = init + center + boldOn + bigFont + "TOKO POS TERPADU" + normalFont + boldOff + "\n";
+            let receiptText = init + center + boldOn + bigFont + "TOKO BU EKA" + normalFont + boldOff + "\n";
             receiptText += left + "--------------------------------\n";
             receiptText += `ID   : ${tx.id}\n`;
             receiptText += `Waktu: ${tx.tanggal}\n`;
