@@ -54,14 +54,19 @@ const App = {
     },
 
     // Metode utama mengirim request POST ke App Script
-    apiCall: async (payload) => {
+   apiCall: async (payload) => {
         try {
-            const formData = new FormData();
-            for (const key in payload) formData.append(key, payload[key]);
-            const res = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+            // Menggunakan URLSearchParams lebih aman dan stabil untuk Google Apps Script
+            const formBody = new URLSearchParams(payload);
+            
+            const res = await fetch(SCRIPT_URL, { 
+                method: 'POST', 
+                body: formBody 
+            });
             return await res.json();
         } catch (err) {
-            throw new Error("Gagal koneksi ke server App Script.");
+            console.error("Fetch Error:", err);
+            throw new Error("Gagal koneksi ke server App Script. Pastikan URL benar dan sudah Deploy versi baru.");
         }
     },
 
