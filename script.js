@@ -1,5 +1,5 @@
 // ==========================================
-// 1. STATE & KONFIGURASI 
+// 1. STATE & KONFIGURASI
 // ==========================================
 
 // URL App Script yang Anda berikan
